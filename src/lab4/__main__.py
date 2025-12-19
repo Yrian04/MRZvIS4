@@ -38,9 +38,9 @@ def main():
         help='Путь к JSON файлу с входным образом для распознавания'
     )
     parser.add_argument(
-        '--train_file', 
+        '--train-file', 
         type=Path,
-        default=Path('data/train.json'),
+        nargs='+',
         help='Путь к JSON файлу с обучающими образами'
     )
     
@@ -52,7 +52,7 @@ def main():
         help='Коэффициент усиления tanh (по умолчанию: 10.0)'
     )
     parser.add_argument(
-        '--max_epoch', 
+        '--max-epoch', 
         type=int, 
         default=1000, 
         help='Макс. кол-во эпох (по умолчанию: 1000)'
@@ -66,15 +66,18 @@ def main():
     parser.add_argument(
         '--image-width', 
         type=int, 
-        default=6, 
+        default=3, 
         help='Ширина образа для вывода (по умолчанию: 6)'
     )
 
     args = parser.parse_args()
 
     # Загрузка данных
-    train_patterns = load_json(args.train_file)
-    input_image = load_json(args.input_file)
+    train_patterns = {}
+    for file in args.train_file:
+        patterns = load_json(file)
+        train_patterns.update(patterns)
+    input_patterns = load_json(args.input_file)
 
     # Инициализация и обучение
     model = HopfieldNetwork(
@@ -82,17 +85,27 @@ def main():
         max_epoch=args.max_epoch, 
         tol=args.tol
     )
-    model.fit(train_patterns)
+    print(len(train_patterns), *map(len, train_patterns.values()))
+    model.fit(list(train_patterns.values()))
 
     # Распознавание
-    result, iterations = model.predict(input_image)
-
-    # Вывод результатов
-    print(f"Релаксация завершена за {iterations} итераций(ий).")
-    print("Входной образ:")
-    print(get_image(input_image, args.image_width))
-    print("Результат:",)
-    print(get_image(result, args.image_width))
+    for symbol, input_pattern in input_patterns.items():
+        result, iterations = model.predict(input_pattern)
+        try:
+            pred_symbol = next(
+                s for s, p in train_patterns.items() 
+                if all(pred == y for pred, y in zip(result, p))
+            )
+        except StopIteration:
+            print('Образ не распознан')
+        else:
+            print(f'Входной символ: {symbol}')
+            print(f'Распознаный символ: {pred_symbol}')
+        print(f"Релаксация завершена за {iterations} итераций(ий).")
+        print("Входной образ:")
+        print(get_image(input_pattern, args.image_width))
+        print("Результат:",)
+        print(get_image(result, args.image_width))
 
 
 if __name__ == "__main__":
